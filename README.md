@@ -1,137 +1,178 @@
-# CVE-2026-35414 — OpenSSH Exposure Checker
+# CVE-2026-35414 — OpenSSH Authorized Exposure Auditor
 
 ## Overview
 
-This repository contains a **safe, non-invasive assessment tool** for identifying potential exposure to **CVE-2026-35414**, a vulnerability affecting **OpenSSH** prior to version **10.3**.
+This repository contains a **safe, authorized assessment tool** for identifying potential exposure to
+**CVE-2026-35414** in environments running **OpenSSH** prior to version **10.3**.
 
-The vulnerability stems from improper parsing of SSH certificate principals when comma-separated values are used, potentially allowing unintended authentication under specific configurations.
-
----
-
-## Important Disclaimer
-
-This tool **does NOT exploit the vulnerability**.
-
-Due to the nature of CVE-2026-35414, **remote exploitation is not possible without**:
-
-* Access to the target system’s SSH configuration
-* Use of SSH certificate authentication
-* Control of (or access to) a trusted Certificate Authority (CA)
-
-This tool is designed for:
-
-* **Red Team reconnaissance**
-* **Blue Team exposure identification**
-* **Security audits and asset inventory**
+The vulnerability relates to improper handling of SSH certificate principals when comma-separated values are used in combination with `authorized_keys` restrictions.
 
 ---
 
-## What This Tool Does
+## Safety & Scope
 
-* Connects to remote hosts over SSH (TCP/22 by default)
-* Retrieves the SSH service banner
-* Parses the reported OpenSSH version
-* Flags systems running **potentially vulnerable versions (< 10.3)**
+This tool is intentionally designed to be **non-exploitative**.
+
+It **does NOT**:
+
+* Attempt authentication bypass
+* Generate or use malicious SSH certificates
+* Perform brute-force or credential attacks
+
+It **DOES**:
+
+* Identify potentially vulnerable OpenSSH versions
+* Perform **authenticated configuration audits (optional)**
+* Detect risky SSH certificate configurations
+* Provide structured output for reporting and remediation
 
 ---
 
-## Understanding the Vulnerability
+## Vulnerability Context
 
-CVE-2026-35414 affects environments using:
+CVE-2026-35414 affects OpenSSH when:
 
-* SSH certificate authentication
-* `authorized_keys` entries with:
+* SSH certificate authentication is used
+* `authorized_keys` contains:
 
   ```bash
   cert-authority,principals="user1,user2"
   ```
-* Certificate Authorities that may issue principals containing commas
+* Certificate principals include comma-separated values
 
-In these conditions, OpenSSH may incorrectly interpret principals, potentially allowing authentication bypass.
+In these scenarios, OpenSSH may incorrectly interpret principals, potentially allowing unintended access.
+
+---
+
+## Features
+
+### Unauthenticated Checks
+
+* SSH banner grabbing
+* OpenSSH version detection
+* Exposure classification (version-based)
+
+### Authenticated Audit (Optional)
+
+* Reads `authorized_keys` across user accounts
+* Detects:
+
+  * `cert-authority` usage
+  * `principals=` restrictions
+  * Comma-separated principal lists
+* Reviews relevant `sshd` configuration
+
+### Reporting
+
+* Human-readable output
+* JSON export
+* CSV export
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/yourusername/cve-2026-35414-auditor.git
+cd cve-2026-35414-auditor
+chmod +x cve_2026_35414_audit.py
+```
+
+No external dependencies required (Python 3.8+ recommended).
 
 ---
 
 ## Usage
 
-### Single Target
+### Single Target (Unauthenticated)
 
 ```bash
-python3 cve_2026_35414_check.py -t 192.168.1.10
+python3 cve_2026_35414_audit.py -t 192.168.1.10
 ```
+
+---
 
 ### Multiple Targets
 
 ```bash
-python3 cve_2026_35414_check.py -f targets.txt --threads 25
+python3 cve_2026_35414_audit.py -f targets.txt --threads 25
 ```
 
-### Options
+---
 
-| Flag        | Description                  |
-| ----------- | ---------------------------- |
-| `-t`        | Single target IP or hostname |
-| `-f`        | File containing targets      |
-| `-p`        | SSH port (default: 22)       |
-| `--threads` | Number of concurrent checks  |
-| `--timeout` | Connection timeout           |
+### Authenticated Audit
+
+```bash
+python3 cve_2026_35414_audit.py \
+  -t 192.168.1.10 \
+  -u auditor \
+  -i ~/.ssh/id_ed25519
+```
+
+---
+
+### Export Results
+
+```bash
+python3 cve_2026_35414_audit.py \
+  -f targets.txt \
+  -u auditor \
+  -i ~/.ssh/id_ed25519 \
+  --json report.json \
+  --csv report.csv
+```
 
 ---
 
 ## Sample Output
 
 ```text
-[POSSIBLY VULNERABLE] 192.168.1.10:22
-  Banner : SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5
-  Finding: OpenSSH version appears to be before 10.3...
+Host: 192.168.1.10:22
+Exposure: CONFIRMED_EXPOSURE_CONDITION
+Banner: SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.5
+OpenSSH Version: 9.6p1
+Version Status: POTENTIALLY_AFFECTED_VERSION
+Authenticated Audit: Yes
+cert-authority Found: True
+principals= Found: True
+Comma-Separated Principals Found: True
 ```
 
 ---
 
-## Interpreting Results
+## 🎯 Exposure Classification
 
-| Status                  | Meaning                         |
-| ----------------------- | ------------------------------- |
-| `POSSIBLY VULNERABLE`   | OpenSSH version < 10.3 detected |
-| `LIKELY NOT VULNERABLE` | OpenSSH 10.3+                   |
-| `UNKNOWN`               | Could not determine version     |
-| `UNREACHABLE`           | Host not accessible             |
-
----
-
-## Limitations
-
-This tool **cannot confirm exploitability**.
-
-To validate the vulnerability, you must have:
-
-* Access to `authorized_keys`
-* Visibility into SSH CA configuration
-* Ability to test certificate-based authentication
+| Level                          | Meaning                                   |
+| ------------------------------ | ----------------------------------------- |
+| `CONFIRMED_EXPOSURE_CONDITION` | All vulnerable conditions detected        |
+| `REVIEW_REQUIRED`              | Partial risky configuration               |
+| `POSSIBLE`                     | Vulnerable version only (unauthenticated) |
+| `LOW`                          | No risky config detected                  |
+| `UNREACHABLE`                  | Host not accessible                       |
 
 ---
 
-## Detection Guidance (Blue Team)
+## What to Look For
 
-To confirm exposure internally:
+High-risk configurations:
 
 ```bash
-grep -R "cert-authority" /home/*/.ssh/authorized_keys
-grep -R "principals=" /home/*/.ssh/authorized_keys
+cert-authority,principals="admin,root"
 ```
 
-Look specifically for:
+Risk factors:
 
-```bash
-principals="user1,user2"
-```
+* Multiple principals in a single string
+* Use of SSH certificate authorities
+* Lack of principal validation controls
 
 ---
 
 ## Mitigation
 
-* Upgrade to **OpenSSH 10.3 or later**
-* Restrict SSH certificate principal formats
-* Avoid comma-separated principals where possible
+* Upgrade to **OpenSSH 10.3+**
+* Avoid comma-separated principals
+* Enforce strict CA issuance policies
 * Prefer:
 
   * `TrustedUserCAKeys`
@@ -139,27 +180,42 @@ principals="user1,user2"
 
 ---
 
-## Future Enhancements
+## Limitations
 
-* Authenticated audit module
-* SSH config parsing
-* Fleet-wide reporting integration
-* Integration with pentesting toolkits
+* Cannot confirm exploitability without:
+
+  * SSH CA access
+  * Certificate issuance control
+  * Banner-based detection may be inaccurate due to distro backports
+  * Requires valid credentials for full audit capability
 
 ---
 
-## License
+## Lab Validation (Recommended)
+
+To fully validate exposure:
+
+* Build a test SSH CA environment
+* Issue certificates with comma-separated principals
+* Observe authentication behavior
+
+Perform only in authorized lab environments.
+
+---
+
+
+## 📄 License
 
 MIT License
 
 ---
 
-## ⚡ Final Notes
+## Final Notes
 
 This vulnerability is:
 
-* Not remotely exploitable at scale
-* Not an unauthenticated RCE
-* High impact in environments using SSH certificate authentication
+* Not remotely exploitable without access
+* Not mass-exploitable
+* High impact in SSH certificate-based environments
 
 Use this tool as part of a broader security assessment strategy.

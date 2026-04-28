@@ -73,7 +73,7 @@ In these scenarios, OpenSSH may incorrectly interpret principals, potentially al
 ## Installation
 
 ```bash
-git https://github.com/dehobbs/cve_2026_35414.git
+git clone https://github.com/dehobbs/cve_2026_35414.git
 cd cve-2026-35414-auditor
 chmod +x cve_2026_35414_audit.py
 ```

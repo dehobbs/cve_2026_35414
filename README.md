@@ -140,7 +140,7 @@ Comma-Separated Principals Found: True
 
 ---
 
-## 🎯 Exposure Classification
+## Exposure Classification
 
 | Level                          | Meaning                                   |
 | ------------------------------ | ----------------------------------------- |
